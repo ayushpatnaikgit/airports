@@ -26,7 +26,6 @@ for row in 1:size(dataset, 2)
     for col in 1:size(dataset, 1)
         # Get the coordinates of the pixel
         if dataset[col, row] < 0.1
-            distances[col, row] = missing
             continue
         end
         pixel_coords = (dims(dataset, 2)[row], dims(dataset, 1)[col])
@@ -36,4 +35,5 @@ for row in 1:size(dataset, 2)
     end
 end
 
-sum(skipmmissing(dataset .* 1./distances)) / sum(skipmmissing(1./distances))
+sum(skipmissing(dataset .* (1 ./ distances))) / sum(skipmissing(1 ./ distances))
+
