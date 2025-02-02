@@ -37,6 +37,9 @@ for row in eachrow(airports)
     row[:agglomoration] = agglomoration(row)
 end
 
+airports = select(airports, [:id, :ident, :type, :name, :latitude_deg, :longitude_deg, :iso_country, :iso_region, :municipality, :agglomoration])
+
+
 CSV.write("../RESULTS/best_airports.csv", airports)
 
 using Plots
