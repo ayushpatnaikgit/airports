@@ -41,6 +41,13 @@ airports = select(airports, [:id, :ident, :type, :name, :latitude_deg, :longitud
 
 
 CSV.write("../RESULTS/best_airports.csv", airports)
+using ExcelFiles
+for col in names(airports)
+    if eltype(airports[!, col]) <: AbstractString
+        airports[!, col] = String.(airports[!, col])
+    end
+end
+save("../RESULTS/best_airports.xlsx", airports)
 
 using Plots
 
