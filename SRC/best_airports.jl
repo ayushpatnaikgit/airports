@@ -1,39 +1,49 @@
 using Rasters
 using Distances
-using PyCall
 import ArchGDAL
 using DimensionalData
+using CSV
+using DataFrames
 
-# Load the airports data using PyCall
-airports = pyimport("airportsdata").load()
-
+url = "https://davidmegginson.github.io/ourairports-data/airports.csv"
+airports = CSV.read(download(url), DataFrame)
+airports = filter(row -> row.type == "large_airport", airports)
 # Define the path to the .tif file
 tif_path = "../DATA/Harmonized_DN_NTL_2020_simVIIRS.tif"
 
-# Extract latitude and longitude from delhi_airport
-delhi_airport = airports["VIDP"]
-delhi_airport_lat = delhi_airport["lat"]
-delhi_airport_lon = delhi_airport["lon"]
-delhi_airport_coords = (delhi_airport_lat, delhi_airport_lon)
-
 # Open the .tif file using Rasters.jl
 dataset = Raster(tif_path)
+dataset = resample(dataset, res = 0.05, method = "average")
 
-# Initialize the ntl matrix with the same dimensions as the dataset
-distances = Array{Union{Float64, Missing}}(undef, size(dataset, 1), size(dataset, 2))
-# Calculate the distance from delhi_airport for each pixel
-for row in 1:size(dataset, 2)
-    for col in 1:size(dataset, 1)
-        # Get the coordinates of the pixel
-        if dataset[col, row] < 0.1
-            continue
+function agglomoration(airport)
+    airport_coords = (airport["latitude_deg"], airport["longitude_deg"])
+    distances = Array{Union{Float64, Missing}}(undef, size(dataset, 1), size(dataset, 2))
+    for row in 1:size(dataset, 2)
+        for col in 1:size(dataset, 1)
+            if dataset[col, row] < 0.1
+                continue
+            end
+            pixel_coords = (dims(dataset, 2)[row], dims(dataset, 1)[col])
+            distance = haversine(airport_coords, pixel_coords)
+            distances[col, row] = distance
         end
-        pixel_coords = (dims(dataset, 2)[row], dims(dataset, 1)[col])
-        # Calculate the distance to delhi_airport using haversine formula
-        distance = haversine(delhi_airport_coords, pixel_coords)
-        distances[col, row] = distance
     end
+    sum(skipmissing(dataset .* (1 ./ distances))) / sum(skipmissing(1 ./ distances))
 end
 
-sum(skipmissing(dataset .* (1 ./ distances))) / sum(skipmissing(1 ./ distances))
+airports[!, :agglomoration] = repeat([0.0], nrow(airports))
 
+for row in eachrow(airports)
+    row[:agglomoration] = agglomoration(row)
+end
+
+CSV.write("../RESULTS/best_airports.csv", airports)
+
+using Plots
+
+latitudes = airports[:, :latitude_deg]
+longitudes = airports[:, :longitude_deg]
+agglomorations = airports[:, :agglomoration]
+
+# Create the plot
+scatter(longitudes, latitudes, markersize=agglomorations, legend=false, xlabel="Longitude", ylabel="Latitude", title="Airports Agglomoration Map")
