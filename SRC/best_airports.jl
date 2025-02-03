@@ -9,13 +9,17 @@ url = "https://davidmegginson.github.io/ourairports-data/airports.csv"
 airports = CSV.read(download(url), DataFrame)
 airports = filter(row -> row.type == "large_airport", airports)
 # Define the path to the .tif file
-tif_path = "../DATA/Harmonized_DN_NTL_2020_simVIIRS.tif"
+ntl_path = "../DATA/Harmonized_DN_NTL_2020_simVIIRS.tif"
 
 # Open the .tif file using Rasters.jl
-dataset = Raster(tif_path)
-dataset = resample(dataset, res = 0.05, method = "average")
+ntl = Raster(ntl_path)
+ntl = resample(ntl, res = 0.05, method = "average")
 
-function agglomoration(airport)
+bv_path = "../DATA/GHS_BUILT_V_E2025_GLOBE_R2023A_4326_30ss_V1_0.tif"
+bv = Raster(bv_path)
+bv = resample(bv, res = 0.05, method = "average")
+
+function agglomeration(airport, dataset)
     airport_coords = (airport["latitude_deg"], airport["longitude_deg"])
     distances = Array{Union{Float64, Missing}}(undef, size(dataset, 1), size(dataset, 2))
     for row in 1:size(dataset, 2)
@@ -31,13 +35,20 @@ function agglomoration(airport)
     sum(skipmissing(dataset .* (1 ./ distances))) / sum(skipmissing(1 ./ distances))
 end
 
-airports[!, :agglomoration] = repeat([0.0], nrow(airports))
+airports[!, :ntl_agglomeration] = repeat([0.0], nrow(airports))
+airports[!, :bv_agglomeration] = repeat([0.0], nrow(airports))
+
 
 for row in eachrow(airports)
-    row[:agglomoration] = agglomoration(row)
+    row[:ntl_agglomeration] = agglomeration(row, ntl)
 end
 
-airports = select(airports, [:id, :ident, :type, :name, :latitude_deg, :longitude_deg, :iso_country, :iso_region, :municipality, :agglomoration])
+for row in eachrow(airports)
+    row[:bv_agglomeration] = agglomeration(row, bv)
+end
+
+
+airports = select(airports, [:id, :ident, :type, :name, :latitude_deg, :longitude_deg, :iso_country, :iso_region, :municipality, :ntl_agglomeration, :bv_agglomeration])
 
 
 CSV.write("../RESULTS/best_airports.csv", airports)
@@ -47,13 +58,5 @@ for col in names(airports)
         airports[!, col] = String.(airports[!, col])
     end
 end
+
 save("../RESULTS/best_airports.xlsx", airports)
-
-using Plots
-
-latitudes = airports[:, :latitude_deg]
-longitudes = airports[:, :longitude_deg]
-agglomorations = airports[:, :agglomoration]
-
-# Create the plot
-scatter(longitudes, latitudes, markersize=agglomorations, legend=false, xlabel="Longitude", ylabel="Latitude", title="Airports Agglomoration Map")
